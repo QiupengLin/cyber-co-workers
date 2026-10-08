@@ -22,7 +22,7 @@ export function normalizeHook(input, env = process.env, now = Date.now()) {
   };
 }
 
-async function main() {
+export async function runHook(normalize = normalizeHook) {
   const timeout = setTimeout(() => process.exit(0), 1200);
   try {
     const chunks = []; let size = 0;
@@ -31,7 +31,7 @@ async function main() {
       if (size > 1024 * 1024) return;
       chunks.push(chunk);
     }
-    const event = normalizeHook(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+    const event = normalize(JSON.parse(Buffer.concat(chunks).toString('utf8')));
     if (!event) return;
     const root = process.env.CYBER_CO_WORKERS_EVENT_DIR || join(homedir(), '.local', 'share', 'cyber-co-workers', 'events');
     await mkdir(root, { recursive: true, mode: 0o700 });
@@ -44,4 +44,4 @@ async function main() {
   } catch { /* Monitoring must never block or change a Codex turn. */ }
   finally { clearTimeout(timeout); }
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await runHook();

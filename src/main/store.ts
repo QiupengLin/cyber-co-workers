@@ -9,7 +9,7 @@ export class OfficeStore {
   // Retain expired entries so repeated disconnected observations cannot respawn them.
   private disconnectedSince = new Map<string, number>();
   connected = false;
-  message = 'Connecting to Codex…';
+  message = 'Waiting for local Codex or Claude Code activity…';
 
   constructor(private now: () => number = Date.now) {}
 

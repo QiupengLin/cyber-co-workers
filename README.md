@@ -1,6 +1,6 @@
 # Cyber Co-workers
 
-A local Mac desktop office for Codex: eight desks, persistent characters, live activity, city windows, day/night lighting, simulated weather, and a coffee corner. Built with a TypeScript backend, a Canvas frontend, and Electron.
+A local Mac desktop office for Codex and Claude Code: eight desks, persistent characters, live activity, city windows, day/night lighting, simulated weather, and a coffee corner. Built with a TypeScript backend, a Canvas frontend, and Electron.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the system design, data flow, module responsibilities, and current limitations.
 
@@ -27,6 +27,18 @@ npm run connect
 This adds our minimal event hooks to `~/.codex/hooks.json`, preserving existing entries and backing up an existing configuration. Review and trust the added definitions with `/hooks` in Codex. It does not grant trust itself. Details: [README-hooks.md](README-hooks.md).
 
 Desktop navigation uses the documented chat deep link. Warp navigation requires a real `WARP_FOCUS_URL` captured by a hook; absence is shown explicitly. Shared-daemon environment propagation may prevent capture, so precise Warp focus is not guaranteed without testing in your terminal. Neither navigation nor monitoring sends prompts or answers approvals.
+
+### Claude Code
+
+```sh
+npm run connect:claude
+```
+
+This merges local observation hooks into `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR/settings.json`), preserves other settings and hooks, and backs up an existing file. Restart Claude Code and review the entries with `/hooks`, then start a turn. To preview the configuration without installing it, run `node scripts/print-hook-config.mjs claude`.
+
+Claude Code sessions appear alongside Codex sessions with separate identities and provider labels. Hooks report working, idle, permission/input waiting, and session end. Subagent events are ignored. Claude prompts, responses, tool inputs, and notification text are never retained. Exact navigation is available only when a valid `WARP_FOCUS_URL` is provided to the hook; no Claude desktop deep link is assumed.
+
+Claude monitoring is hook-only and local: it does not discover historical sessions or remote cloud sessions. After one minute without a hook event, a session becomes disconnected and leaves after the 30-second grace period. This also applies to quiet work and idle/waiting sessions; a fresh event brings the character back. An ended session can be resumed, while manual dismissal lasts until the office restarts.
 
 ## Current limitations
 

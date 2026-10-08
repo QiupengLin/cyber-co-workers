@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, shell, Menu } from 'electron';
 import path from 'node:path';
 import { CodexObserver } from './observer';
 import { HookObserver, type HookSessionEvent } from './hooks';
+import { mergeHookSessions } from './hook-sessions';
 import { OfficeStore } from './store';
 import { demoSessions } from './demo';
 import { sessionTarget } from './navigation';
@@ -20,11 +21,14 @@ const hookEvents = new Map<string, HookSessionEvent>();
 const demos = demoSessions();
 const snapshot = (): OfficeSnapshot => demo ? {sessions:demos,connected:false,message:'Demo office — simulated sessions',demo:true} : store.snapshot();
 function publish() { if (window && !window.isDestroyed()) window.webContents.send('office:changed',snapshot()); }
-function mergeHook(session: WorkerSession): WorkerSession {
- const event = hookEvents.get(session.id);
- if (!event) return session;
- return {...session, source:event.source==='cli' ? 'cli' : session.source, focusUrl:event.focusUrl ?? session.focusUrl,
- ...(session.status === 'disconnected' && event.updatedAt > Date.now()-60_000 ? {status:event.status, detail:event.detail,updatedAt:event.updatedAt} : {})};
+let observedSessions: WorkerSession[] = [];
+let observerConnected = false;
+let observerMessage = 'Waiting for local Codex or Claude Code activity';
+function refreshSessions() {
+ const combined=mergeHookSessions(observedSessions,hookEvents.values()).map(session=>routing.apply(session));
+ const hasHooks=combined.some(session=>hookEvents.has(session.id) && session.status!=='disconnected');
+ store.update(combined,observerConnected || hasHooks,hasHooks ? 'Watching local Codex and Claude Code activity' : observerMessage);
+ publish();
 }
 function createWindow() {
  window = new BrowserWindow({width:1320,height:900,minWidth:960,minHeight:700,title:'Cyber Co-workers',backgroundColor:'#f6f1e7',titleBarStyle:'hiddenInset',trafficLightPosition:{x:20,y:22},webPreferences:{preload:path.join(__dirname,'preload.js'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
@@ -56,21 +60,14 @@ app.whenReady().then(()=>{
  });
  createWindow();
  observer=new CodexObserver((sessions,connected,message)=>{
-  const combined=sessions.map(session=>routing.apply(mergeHook(session)));
-  const ids=new Set(combined.map(s=>s.id));
-  for(const [id,event] of hookEvents) {
-   const current=store.get(id);
-   if(current && !ids.has(id) && !event.ended && event.updatedAt>Date.now()-60_000) combined.push({...current,status:event.status,detail:event.detail,updatedAt:event.updatedAt});
-  }
-  store.update(combined,connected,message);publish();
+  observedSessions=sessions;observerConnected=connected;observerMessage=message;refreshSessions();
  });
  observer.start();
  hooks=new HookObserver(event=>{
+  const previous=hookEvents.get(event.id);
+  if(previous && previous.updatedAt>event.updatedAt)return;
   hookEvents.set(event.id,event);
-  if(event.ended){store.dismiss(event.id);observer?.dismiss(event.id);publish();return}
-  const previous=store.get(event.id);
-  store.upsert({id:event.id,title:event.title ?? previous?.title ?? 'Codex session',project:event.project ?? previous?.project ?? '',source:event.source==='unknown' ? previous?.source ?? 'unknown' : event.source,status:event.status,detail:event.detail,updatedAt:event.updatedAt,desk:previous?.desk ?? -1,focusUrl:event.focusUrl ?? previous?.focusUrl});
-  publish();
+  refreshSessions();
  }, undefined, event=>{
   routing.remember(event);
   const current=store.get(event.id);
