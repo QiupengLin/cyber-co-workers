@@ -9,7 +9,7 @@
     "build": "tsc --noEmit && vite build && esbuild src/main/index.ts src/main/preload.ts --bundle --platform=node --format=cjs --external:electron --outdir=dist/main",
     "start": "electron .",
     "preview": "vite --host 127.0.0.1",
-    "test": "tsx --test src/main/*.test.ts scripts/*.test.ts && node --test scripts/*.test.mjs",
+    "test": "tsx --test src/main/*.test.ts src/renderer/*.test.ts scripts/*.test.ts && node --test scripts/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "package": "npm run build && electron-packager . 'Cyber Co-workers' --platform=darwin --out=release --overwrite --ignore='^/(src|release|.git|node_modules/.cache)($|/)'",
     "connect": "node scripts/install-hooks.mjs",

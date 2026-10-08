@@ -1,5 +1,6 @@
 import './style.css';
 import type { OfficeSnapshot, WorkerSession } from '../shared/types';
+import { Roaming, deskPosition, type Pose } from './roaming';
 const $ = <T extends HTMLElement>(s:string) => document.querySelector<T>(s)!;
 const escape = (s:string) => s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 const colors = ['#82d9c6','#b6a3dd','#e5b180','#8abfdf','#d18a9e','#b6ca88','#e1ca87','#88bdb7'];
@@ -49,17 +50,19 @@ function drawDesk(x:number,y:number,index:number,s?:WorkerSession){
  text(String(index+1).padStart(2,'0'),x-43,y+7,'#725239',7);
  rect(x-17,y+35,34,9,'#785c46');rect(x-20,y+18,40,23,'#92977a');rect(x-17,y+18,34,4,'#b7bd97');
 }
-function character(x:number,y:number,s:WorkerSession,time:number,index:number,boss=false){const color=colors[Math.abs(s.desk)%8];const walking=s.status==='idle';const bounce=walking?Math.sin(time*7+index)*1.8:Math.sin(time*2+index)*.4; y+=bounce;rect(x-13,y+22,28,5,'#10232b66');rect(x-7,y+10,6,13,'#192833');rect(x+3,y+10,6,13,'#192833');rect(x-9,y+22+(walking?Math.sin(time*7)*2:0),9,4,'#84919a');rect(x+3,y+22-(walking?Math.sin(time*7)*2:0),9,4,'#84919a');rect(x-12,y-7,25,21,color);rect(x-15,y-4,4,15,color);rect(x+13,y-4,4,15,color);rect(x-8,y-25,18,18,'#d4ac89');rect(x-10,y-27,22,7,index%2?'#4c363a':'#28333c');rect(x-10,y-24,5,11,index%2?'#4c363a':'#28333c');rect(x-5,y-17,3,3,'#293844');rect(x+5,y-17,3,3,'#293844');rect(x-2,y-10,6,2,'#a77d6b');rect(x-4,y-5,9,4,'#d3e0d3');if(s.status==='working'){rect(x-15,y+7,6,4,'#d4ac89');rect(x+11,y+6+Math.round(Math.sin(time*9)*2),6,4,'#d4ac89');}if(s.status==='idle'){rect(x+14,y+2,8,9,'#d9c9a9');}if(boss)return;const indicator=s.status==='waiting'?'?':s.status==='disconnected'?'×':s.status==='idle'?'·':'⌁';const tint={working:'#82d9c6',idle:'#b6b4e8',waiting:'#edc68f',disconnected:'#94a2ad'}[s.status];rect(x-10,y-48,21,17,'#122832');rect(x-10,y-48,21,2,tint);text(indicator,x+.5,y-35,tint,13,'center');hitboxes.push({session:s,x:x-32,y:y-50,w:64,h:83});}
+function character(x:number,y:number,s:WorkerSession,time:number,index:number,pose?:Pose){const boss=!pose;const color=colors[Math.abs(s.desk)%8];const walking=!!pose?.walking;const bounce=walking?Math.sin(time*7+index)*1.8:Math.sin(time*2+index)*.4; y+=bounce;rect(x-13,y+22,28,5,'#10232b66');rect(x-7,y+10,6,13,'#192833');rect(x+3,y+10,6,13,'#192833');rect(x-9,y+22+(walking?Math.sin(time*7)*2:0),9,4,'#84919a');rect(x+3,y+22-(walking?Math.sin(time*7)*2:0),9,4,'#84919a');rect(x-12,y-7,25,21,color);rect(x-15,y-4,4,15,color);rect(x+13,y-4,4,15,color);rect(x-8,y-25,18,18,'#d4ac89');rect(x-10,y-27,22,7,index%2?'#4c363a':'#28333c');rect(x-10,y-24,5,11,index%2?'#4c363a':'#28333c');rect(x-5,y-17,3,3,'#293844');rect(x+5,y-17,3,3,'#293844');rect(x-2,y-10,6,2,'#a77d6b');rect(x-4,y-5,9,4,'#d3e0d3');if(s.status==='working'&&!walking){rect(x-15,y+7,6,4,'#d4ac89');rect(x+11,y+6+Math.round(Math.sin(time*9)*2),6,4,'#d4ac89');}if(pose?.mug){rect(x+14,y+2,8,9,'#d9c9a9');rect(x+21,y+4,3,5,'#d9c9a9');}if(pose?.activity==='pingpong'){const swing=Math.round(Math.sin(time*4.4+index)*3),px=x>885?x-25:x+15;rect(px,y+swing,10,9,index%2?'#dbc086':'#b97055');rect(px+3,y+9+swing,3,6,'#e7cea4');}if(boss)return;const indicator=s.status==='waiting'?'?':s.status==='disconnected'?'×':s.status==='idle'?'·':'⌁';const tint={working:'#82d9c6',idle:'#b6b4e8',waiting:'#edc68f',disconnected:'#94a2ad'}[s.status];rect(x-10,y-48,21,17,'#122832');rect(x-10,y-48,21,2,tint);text(indicator,x+.5,y-35,tint,13,'center');hitboxes.push({session:s,x:x-32,y:y-50,w:64,h:83});}
 // Kevin is a permanent resident, independent of live and demo session slots.
 const kevin:WorkerSession={id:'office-kevin',title:'Kevin',project:'',source:'unknown',status:'working',desk:2,updatedAt:0};
-const deskPosition=(index:number)=>({x:365+(index%4)*195,y:340+Math.floor(index/4)*165});
+// Idle co-workers wander off to the coffee nook, common room, or ping-pong table.
+const roaming=new Roaming();let lastTime=0;
 function rug(x:number,y:number,w:number,h:number){
  rect(x,y,w,h,'#b7795f');rect(x+5,y+5,w-10,h-10,'#d1a183');
  for(let i=12;i<w-8;i+=10){rect(x+i,y-3,2,3,'#b7795f');rect(x+i,y+h,2,3,'#b7795f');}
 }
 function draw(time:number){
  const hour=new Date().getHours(),day=hour>=7&&hour<18;
- const list=officeSlots();hitboxes=[];ctx.imageSmoothingEnabled=false;
+ const list=officeSlots();hitboxes=[];
+ const poses=roaming.update(Math.min(.1,Math.max(0,time-lastTime)),list.flatMap((s,slot)=>s?[{id:s.id,slot,idle:s.status==='idle'}]:[]));lastTime=time;const rally=roaming.occupied('pingpong')===2;ctx.imageSmoothingEnabled=false;
  rect(0,0,W,H,'#eadbc1');rect(0,146,W,H-146,'#d5b78f');
  for(let y=150;y<H;y+=29){line(0,y,W,y,'#c3a078');for(let x=(Math.floor(y/29)%2)*60;x<W;x+=120)line(x,y,x,y+29,'#c6a57f');}
  // Tall windows keep the city view, with warm interior lighting at every hour.
@@ -83,7 +86,7 @@ function draw(time:number){
  text('KEVIN’S OFFICE',141,199,'#775c44',11,'center');text('THE BOSS · ALWAYS IN',141,217,'#99816a',8,'center');
  // Small bookshelf, desk lamp, and a resident boss seated at his desk.
  rect(46,230,65,9,'#aa7d54');for(let i=0;i<7;i++)rect(50+i*8,218-(i%3)*3,6,12+(i%3)*3,['#8b9a77','#b87861','#c9ac70'][i%3]);
- drawDesk(142,315,0,kevin);character(142,341,kevin,time,2,true);
+ drawDesk(142,315,0,kevin);character(142,341,kevin,time,2);
  rect(167,304,17,3,'#8b7353');rect(174,284,3,21,'#8b7353');rect(163,280,24,9,'#f1cc83');
  text('Kevin',142,389,'#6f513b',12,'center');text('A little space to think.',141,438,'#99816a',8,'center');plant(221,251);
  // Coffee nook: espresso machine, stacked cups, and rising steam.
@@ -110,18 +113,19 @@ function draw(time:number){
  line(774,207,994,207,'#e9e5c8',2);rect(882,175,3,61,'#f2e4c6');
  for(let y=177;y<226;y+=5)line(877,y,890,y,'#e1ddc7');
  rect(875,172,3,63,'#6d745d');rect(890,172,3,63,'#6d745d');
- rect(790,192,12,11,'#b97055');rect(795,203,3,9,'#e7cea4');rect(960,213,12,11,'#dbc086');rect(964,224,3,8,'#e7cea4');rect(946,191,5,5,'#fff5dc');
+ if(!rally){rect(790,192,12,11,'#b97055');rect(795,203,3,9,'#e7cea4');rect(960,213,12,11,'#dbc086');rect(964,224,3,8,'#e7cea4');}
+ if(rally){const f=(Math.sin(time*2.2)+1)/2;rect(778+f*212,196-Math.abs(Math.cos(time*2.2))*14,5,5,'#fff5dc');}else rect(946,191,5,5,'#fff5dc');
  text('A LITTLE FRIENDLY COMPETITION',884,271,'#876a50',8,'center');plant(1060,235);
  // Smaller desks have generous space on every side.
  for(let i=0;i<8;i++){const {x,y}=deskPosition(i);drawDesk(x,y,i,list[i]);}
  for(let i=0;i<8;i++){
   const s=list[i];const {x,y}=deskPosition(i);
   if(!s){text('OPEN DESK',x,y+85,'#9b7d5b',8,'center');continue;}
-  let cx=x,cy=y+24;if(s.status==='idle'){cx+=Math.sin(time*.16+i*2)*28;cy=y+48+Math.cos(time*.16+i*2)*5;}
-  character(cx,cy,s,time,i);
   text(s.title.length>23?s.title.slice(0,22)+'…':s.title,x,y+87,'#654e3c',9,'center');
   text(statuses[s.status].toUpperCase(),x,y+102,'#927458',7,'center');
  }
+ // Draw back-to-front so co-workers walking past overlap naturally.
+ list.map((s,i)=>({s,i,pose:s&&poses.get(s.id)})).filter(c=>c.s&&c.pose).sort((a,b)=>a.pose!.y-b.pose!.y).forEach(({s,i,pose})=>character(pose!.x,pose!.y,s!,time,i,pose));
  rect(0,H-12,W,12,'#aa8561');rect(0,H-12,W,3,'#efdab7');
  if(hovered){const h=hitboxes.find(h=>h.session.id===hovered?.id);if(h){ctx.strokeStyle='#7c8660';ctx.lineWidth=1;ctx.strokeRect(h.x-3,h.y-4,h.w+6,h.h+8);}}
 }
