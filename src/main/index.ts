@@ -27,7 +27,7 @@ function mergeHook(session: WorkerSession): WorkerSession {
  ...(session.status === 'disconnected' && event.updatedAt > Date.now()-60_000 ? {status:event.status, detail:event.detail,updatedAt:event.updatedAt} : {})};
 }
 function createWindow() {
- window = new BrowserWindow({width:1320,height:900,minWidth:960,minHeight:700,title:'Cyber Co-workers',backgroundColor:'#09131b',titleBarStyle:'hiddenInset',trafficLightPosition:{x:20,y:22},webPreferences:{preload:path.join(__dirname,'preload.js'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
+ window = new BrowserWindow({width:1320,height:900,minWidth:960,minHeight:700,title:'Cyber Co-workers',backgroundColor:'#f6f1e7',titleBarStyle:'hiddenInset',trafficLightPosition:{x:20,y:22},webPreferences:{preload:path.join(__dirname,'preload.js'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
  window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
  window.webContents.on('will-navigate',(event)=>event.preventDefault());
  const development = process.env.OFFICE_DEV_URL;
