@@ -61,12 +61,30 @@ The package is written to `release/`. Tests cover state normalization, history/s
 
 ## Structure
 
-- `src/main/observer.ts`: read-only daemon transport and rollout fallback
-- `src/main/codex-rollouts.ts`: bounded fresh structural event reader
-- `src/main/hooks.ts` and `scripts/codex-hook.mjs`: private minimal event spool
-- `src/main/store.ts`: stable identities, desks, dismissals
-- `src/main/navigation.ts`: restricted exact-session destinations
-- `src/renderer/`: original procedural office and controls
-- `src/shared/types.ts`: typed backend/UI contract
+```text
+src/
+  app/            Electron lifecycle, IPC handlers, and preload bridge
+  integrations/   External observation adapters
+    codex/        Daemon transport, log reader, and normalization
+    hooks/        Hook event spool observer for Codex and Claude
+  office/         Session merging, desks, dismissal, navigation, demo data
+  renderer/       Canvas office, controls, styling, character movement
+  shared/         Session/IPC types and validated hook event contract
+scripts/
+  dev/            Development app launcher
+  *-hook.mjs      Stable executable paths for installed hook registrations
+  install-hooks.mjs / print-hook-config.mjs   Hook setup commands
+  test.mjs        Recursive test discovery and runner
+tests/
+  integration/    Hook delivery and navigation recovery across modules
+```
+
+Unit tests live beside their implementation. Tests spanning multiple modules live in
+`tests/integration/`. `npm test` discovers nested tests automatically.
+
+Start with `src/app/index.ts` to follow application wiring. Add provider observation
+under `src/integrations/`, office behavior under `src/office/`, and visual behavior
+under `src/renderer/`. See [architecture ownership rules](ARCHITECTURE.md#modules-and-ownership)
+for dependency direction and extension guidance.
 
 All monitoring stays local. The browser renderer has no Node access; desktop actions cross a narrow preload bridge. The app does not retain transcripts, tool arguments, or prompts. Optional hook files contain minimal status metadata and supplied approval descriptions.

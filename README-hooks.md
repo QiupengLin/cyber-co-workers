@@ -50,9 +50,9 @@ Codex hook definitions require review and trust through `/hooks`; installing thi
 
 ### Interaction with the other Codex observers
 
-[observer.ts](src/main/observer.ts) polls loaded-thread metadata every two seconds using `thread/loaded/list` and `thread/read` with `includeTurns: false`. It also polls [codex-rollouts.ts](src/main/codex-rollouts.ts) every two seconds for fresh structural events. These are independent of hook execution.
+[observer.ts](src/integrations/codex/observer.ts) polls loaded-thread metadata every two seconds using `thread/loaded/list` and `thread/read` with `includeTurns: false`. It also polls [codex-rollouts.ts](src/integrations/codex/codex-rollouts.ts) every two seconds for fresh structural events. These are independent of hook execution.
 
-[hook-sessions.ts](src/main/hook-sessions.ts) starts with those observations and overlays an accepted hook when any of these conditions holds:
+[hook-sessions.ts](src/office/hook-sessions.ts) starts with those observations and overlays an accepted hook when any of these conditions holds:
 
 - The hook contains `ended: true`.
 - No observation with the same ID exists.
@@ -183,7 +183,7 @@ The script performs no network calls and does not read `transcript_path`. It emi
 
 ## App ingestion and retention
 
-[HookObserver](src/main/hooks.ts) polls immediately on start and then every 700 milliseconds, skipping overlapping polls. It examines at most the first 512 filenames matching 64 lowercase hexadecimal characters plus `.json`; this list is not ordered by activity. Old files can therefore crowd out newer files if the directory grows beyond that limit.
+[HookObserver](src/integrations/hooks/observer.ts) polls immediately on start and then every 700 milliseconds, skipping overlapping polls. It examines at most the first 512 filenames matching 64 lowercase hexadecimal characters plus `.json`; this list is not ordered by activity. Old files can therefore crowd out newer files if the directory grows beyond that limit.
 
 The observer validates directory ownership and permissions as above. Each candidate must be a regular non-symlink file, no larger than 4096 bytes, and owned by the current UID where available. The writer requests `0600`; the reader does not separately enforce file mode bits. Files with unchanged `mtimeMs` are skipped.
 
@@ -202,9 +202,9 @@ All occupancy, accepted-event, routing, and dismissal maps are in memory. Restar
 
 The adapters accept `WARP_FOCUS_URL` only if it matches `^war(?:p|ppreview)://session/[a-fA-F0-9]{32}$`: `warp://session/` or `warppreview://session/`, followed by exactly 32 hexadecimal characters. The hook boundary does not accept a trailing slash or arbitrary action URL. It never constructs a pane link from a PID, terminal name, or guessed UUID.
 
-[SessionRouting](src/main/session-routing.ts) keeps a known valid link when a newer event has no link. An end event clears it. Older routing events cannot override newer ones; at equal timestamps an existing end marker wins. Valid old files can restore routing for an independently observed session without replaying its activity.
+[SessionRouting](src/office/session-routing.ts) keeps a known valid link when a newer event has no link. An end event clears it. Older routing events cannot override newer ones; at equal timestamps an existing end marker wins. Valid old files can restore routing for an independently observed session without replaying its activity.
 
-[navigation.ts](src/main/navigation.ts) allows an exact Warp session destination and, for Codex desktop sessions, a `codex://threads/<id>` destination. Claude has no desktop fallback. Missing Warp environment propagation therefore leaves a Claude session visible but without an exact navigation target. Clicking a character opens the destination through Electron; it does not send a prompt or answer permission requests.
+[navigation.ts](src/office/navigation.ts) allows an exact Warp session destination and, for Codex desktop sessions, a `codex://threads/<id>` destination. Claude has no desktop fallback. Missing Warp environment propagation therefore leaves a Claude session visible but without an exact navigation target. Clicking a character opens the destination through Electron; it does not send a prompt or answer permission requests.
 
 ## Verification and troubleshooting
 

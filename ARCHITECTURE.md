@@ -29,16 +29,48 @@ There is no hosted backend. Observation, normalization, and desktop navigation r
 
 ## Modules and ownership
 
+The source tree has five responsibility areas. `app` wires the Electron runtime,
+`integrations` observes external providers, `office` owns session behavior,
+`renderer` owns presentation, and `shared` defines their common contracts.
+
+Dependency direction:
+
+- `app` composes `integrations`, `office`, and `shared`.
+- `integrations` normalizes external observations into `shared` contracts.
+- `office` depends on `shared`; it does not import Electron, filesystem observers,
+  or provider transports.
+- `renderer` uses `shared` types and the preload interface; it does not import
+  `app`, `office`, or `integrations`.
+- `shared` is runtime-neutral and imports no other source area.
+
+For a new provider, place observation and normalization in `integrations/<provider>/`,
+produce `WorkerSession` observations (or validated hook events), and wire the observer
+in `app/index.ts`. Extend the shared provider types and renderer labels when needed.
+Provider transport details stay inside the integration. Shared office policies, such
+as desk allocation or dismissal, belong in `office`.
+
+Keep tests beside the module they exercise. Cross-module recovery and subprocess
+checks live in `tests/integration/`. `scripts/test.mjs` discovers all nested
+`*.test.ts` and `*.test.mjs` files under `src`, `scripts`, and `tests`.
+Development tooling lives in `scripts/dev/`. The top-level hook executables in
+`scripts/` retain their paths because existing user hook configurations reference
+those absolute paths. Build output remains `dist/main` and `dist/renderer`.
+
+
 | Module | Responsibility |
 | --- | --- |
-| `src/main/index.ts` | Application lifecycle, window creation, IPC handlers, observation merging, live/demo selection |
-| `src/main/observer.ts` | Connect to the existing Codex daemon, poll loaded sessions, reconnect, merge daemon and log observations |
-| `src/main/codex-state.ts` | Normalize daemon metadata into the shared session model |
-| `src/main/codex-rollouts.ts` | Read fresh structural events from local session logs when direct live metadata is unavailable |
-| `src/main/hooks.ts` | Validate and consume minimal hook events from a private directory |
-| `src/main/store.ts` | Retain sessions, allocate stable desks, preserve navigation links, and honor dismissals |
-| `src/main/navigation.ts` | Select and validate an exact-session destination |
-| `src/main/preload.ts` | Expose the limited `window.office` API to the renderer |
+| `src/app/index.ts` | Application lifecycle, window creation, IPC handlers, observation merging, live/demo selection |
+| `src/integrations/codex/observer.ts` | Connect to the existing Codex daemon, poll loaded sessions, reconnect, merge daemon and log observations |
+| `src/integrations/codex/codex-state.ts` | Normalize daemon metadata into the shared session model |
+| `src/integrations/codex/codex-rollouts.ts` | Read fresh structural events from local session logs when direct live metadata is unavailable |
+| `src/integrations/hooks/observer.ts` | Consume minimal hook events from a private directory |
+| `src/shared/hook-event.ts` | Define and validate the runtime-neutral hook event contract |
+| `src/office/hook-sessions.ts` | Merge hook events with observed sessions |
+| `src/office/session-routing.ts` | Recover and retain valid navigation destinations |
+| `src/office/demo.ts` | Supply simulated office sessions |
+| `src/office/store.ts` | Retain sessions, allocate stable desks, preserve navigation links, and honor dismissals |
+| `src/office/navigation.ts` | Select and validate an exact-session destination |
+| `src/app/preload.ts` | Expose the limited `window.office` API to the renderer |
 | `src/shared/types.ts` | Define the session, snapshot, and IPC API contracts |
 | `src/renderer/main.ts` | Canvas artwork, character animation, scene hit testing, roster, overflow, and tooltips |
 | `src/renderer/style.css` | Window layout, responsive sizing, controls, and status styling |
@@ -148,6 +180,6 @@ Sessions with no captured Warp link remain visible but cannot navigate precisely
 
 `scripts/claude-hook.mjs` maps Claude Code hook inputs to the shared minimal event schema and reuses the bounded atomic writer in `scripts/codex-hook.mjs`. `scripts/print-hook-config.mjs claude` generates the configuration; `npm run connect:claude` merges it into Claude settings with a backup. The event carries `harness: "claude"` and a `claude:`-prefixed ID, keeping it separate from Codex IDs in the spool, routing map, store, and UI. Existing Codex events remain compatible and default to Codex when the harness field is absent.
 
-`src/main/hook-sessions.ts` merges fresh hook sessions with Codex observations. Both hook callbacks and observer polls refresh the combined snapshot, so a Claude-only office reports connected even when the Codex daemon is unavailable. Session end carries an explicit ended marker and removes the occupant, allowing a resumed session to return. Manual dismissals still belong to the store. Claude navigation only accepts captured Warp destinations.
+`src/office/hook-sessions.ts` merges fresh hook sessions with Codex observations. Both hook callbacks and observer polls refresh the combined snapshot, so a Claude-only office reports connected even when the Codex daemon is unavailable. Session end carries an explicit ended marker and removes the occupant, allowing a resumed session to return. Manual dismissals still belong to the store. Claude navigation only accepts captured Warp destinations.
 
 Claude is a local hook-only provider: no historical scan, transcript parsing, remote cloud monitoring, or model requests. Accepted sessions persist without an inactivity timeout and retain their last reported state. If a terminal closes without emitting SessionEnd, manual dismissal is required. Subagent hook events are filtered by `agent_id`; the adapter never stores user content or emits decisions. Tests cover the adapter lifecycle, installer preservation/idempotence, actual subprocess-to-observer delivery, namespace isolation, resumption, and retention during silence alongside the existing Codex tests.

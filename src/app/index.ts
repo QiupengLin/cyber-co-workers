@@ -1,12 +1,13 @@
 import { app, BrowserWindow, ipcMain, shell, Menu } from 'electron';
 import path from 'node:path';
-import { CodexObserver } from './observer';
-import { HookObserver, type HookSessionEvent } from './hooks';
-import { mergeHookSessions } from './hook-sessions';
-import { OfficeStore } from './store';
-import { demoSessions } from './demo';
-import { sessionTarget } from './navigation';
-import { SessionRouting } from './session-routing';
+import { CodexObserver } from '../integrations/codex/observer';
+import { HookObserver } from '../integrations/hooks/observer';
+import type { HookSessionEvent } from '../shared/hook-event';
+import { mergeHookSessions } from '../office/hook-sessions';
+import { OfficeStore } from '../office/store';
+import { demoSessions } from '../office/demo';
+import { sessionTarget } from '../office/navigation';
+import { SessionRouting } from '../office/session-routing';
 import type { OfficeSnapshot, WorkerSession } from '../shared/types';
 
 app.setName('Cyber Co-workers');

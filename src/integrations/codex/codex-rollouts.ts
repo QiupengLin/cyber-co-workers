@@ -1,7 +1,7 @@
 import { sessionSource } from './codex-state';
 import { readdir, stat, open } from 'node:fs/promises';
 import { join, basename } from 'node:path';
-import type { WorkerSession, WorkerStatus } from '../shared/types';
+import type { WorkerSession, WorkerStatus } from '../../shared/types';
 
 type Event = { timestamp?: string; type?: string; payload?: Record<string, any> };
 type Cursor = { offset: number; remainder: string; session?: WorkerSession; lastSignal: number; waitingCall?: string };

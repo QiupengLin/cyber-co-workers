@@ -1,4 +1,4 @@
-import type { WorkerSession, WorkerStatus } from '../shared/types';
+import type { WorkerSession, WorkerStatus } from '../../shared/types';
 
 export interface ThreadMetadata {
   id: string; name?: string | null; preview?: string; cwd?: string;

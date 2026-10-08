@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { HookObserver, type HookSessionEvent } from './hooks';
-import { OfficeStore } from './store';
-import { normalizeThread } from './codex-state';
-import { sessionTarget } from './navigation';
-import { SessionRouting } from './session-routing';
+import { HookObserver } from '../../src/integrations/hooks/observer';
+import type { HookSessionEvent } from '../../src/shared/hook-event';
+import { OfficeStore } from '../../src/office/store';
+import { normalizeThread } from '../../src/integrations/codex/codex-state';
+import { sessionTarget } from '../../src/office/navigation';
+import { SessionRouting } from '../../src/office/session-routing';
 
 const id = 'test-live-warp-session';
 const focusUrl = 'warp://session/' + 'a'.repeat(32);

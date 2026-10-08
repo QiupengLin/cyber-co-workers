@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mergeHookSessions } from './hook-sessions';
-import { parseHookEvent } from './hooks';
+import { parseHookEvent } from '../shared/hook-event';
 import { OfficeStore } from './store';
 import { sessionTarget } from './navigation';
 const event=(updatedAt:number,extra={})=>parseHookEvent({id:'claude:shared-id',harness:'claude',status:'working',updatedAt,...extra})!;

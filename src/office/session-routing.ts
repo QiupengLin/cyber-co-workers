@@ -1,5 +1,5 @@
 import type { WorkerSession } from '../shared/types';
-import { parseHookEvent, type HookSessionEvent } from './hooks';
+import { parseHookEvent, type HookSessionEvent } from '../shared/hook-event';
 
 /** Routing enriches live observations; it never admits a session to the office. */
 export class SessionRouting {

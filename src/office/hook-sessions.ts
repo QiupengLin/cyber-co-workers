@@ -1,5 +1,5 @@
 import type { WorkerSession } from '../shared/types';
-import type { HookSessionEvent } from './hooks';
+import type { HookSessionEvent } from '../shared/hook-event';
 
 export function sessionFromHook(event: HookSessionEvent, previous?: WorkerSession): WorkerSession {
   const label = event.harness === 'claude' ? 'Claude Code' : 'Codex';

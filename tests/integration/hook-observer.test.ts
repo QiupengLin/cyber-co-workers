@@ -4,7 +4,8 @@ import { mkdtemp, rm, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { HookObserver, type HookSessionEvent } from '../src/main/hooks';
+import { HookObserver } from '../../src/integrations/hooks/observer';
+import type { HookSessionEvent } from '../../src/shared/hook-event';
 
 test('real hook file forwards sanitized permission and exact Warp focus to observer', async () => {
  const directory = await mkdtemp(join(tmpdir(), 'cyber-hook-observer-'));

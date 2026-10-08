@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { WorkerSession } from '../shared/types';
+import type { WorkerSession } from '../../shared/types';
 import { normalizeThread, type ThreadMetadata } from './codex-state';
 import { RolloutObserver } from './codex-rollouts';
 
