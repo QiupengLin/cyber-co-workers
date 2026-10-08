@@ -16,7 +16,7 @@ npm start
 
 ## Connect
 
-Codex daemon metadata is polled read-only every two seconds. Desktop sessions using a separate private app-server are detected from **fresh structural events** in local Codex session logs. Start the office, then continue a Codex turn: the worker should appear. Already-idle desktop chats do not populate the office until fresh activity. Subagents do not occupy desks.
+Codex daemon metadata is polled read-only every two seconds. Desktop sessions using a separate private app-server are detected from **fresh structural events** in local Codex session logs. Start the office, then continue a Codex turn: the worker should appear. Already-idle desktop chats do not populate the office until fresh activity. Subagents do not occupy desks. Disconnected characters leave automatically after 30 seconds; they can return when live activity reconnects. Manual dismissal still hides a session for the remainder of the app run.
 
 For permission descriptions and exact Warp pane links:
 

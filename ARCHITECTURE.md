@@ -94,11 +94,11 @@ Events contain a session ID, status, timestamp, project basename, and optional v
 | `working` | An observed active state or work event | Character works at its desk |
 | `idle` | An explicit idle state or completed/interrupted turn | Character remains present and can wander |
 | `waiting` | An observed approval or user-input request | Character shows a question mark |
-| `disconnected` | Current state cannot be established | Character remains with a distinct indicator |
+| `disconnected` | Current state cannot be established | Character shows a distinct indicator, then leaves after 30 seconds |
 
 Observations are deduplicated by session ID. A live daemon record takes precedence over the log fallback; a disconnected daemon record does not replace an available log record. Main-process merging preserves hook-provided Warp links and CLI identity. Recent hook state can fill a disconnected observation or keep a hook-only session present for up to one minute. Hook callbacks publish immediately; subsequent live observations may replace their activity details.
 
-`OfficeStore` assigns the first available desk and retains that assignment across polling order changes. Missing observations become disconnected rather than disappearing. Explicit dismissal and hook-reported session end remove an occupant and prevent its readmission for the remainder of the app run. These assignments and dismissals are in memory, not persisted across restarts.
+`OfficeStore` assigns the first available desk and retains that assignment across polling order changes. Missing observations become disconnected. A one-second main-process timer removes characters after 30 continuous seconds of disconnection, even without new observations. Repeated disconnected polls do not restart the timer or recreate removed characters. Live observations cancel the timer or readmit automatically removed sessions; other occupants retain their desks. Explicit dismissal and hook-reported session end remove an occupant and prevent its readmission for the remainder of the app run. These assignments and dismissals are in memory, not persisted across restarts.
 
 ## Desktop boundary and navigation
 

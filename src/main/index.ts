@@ -11,6 +11,7 @@ app.setName('Cyber Co-workers');
 let window: BrowserWindow | null = null;
 let observer: CodexObserver | undefined;
 let hooks: HookObserver | undefined;
+let expiryTimer: ReturnType<typeof setInterval> | undefined;
 let demo = process.argv.includes('--demo');
 const store = new OfficeStore();
 const hookEvents = new Map<string, HookSessionEvent>();
@@ -70,7 +71,8 @@ app.whenReady().then(()=>{
   publish();
  });
  hooks.start();
+ expiryTimer=setInterval(()=>{if(store.expireDisconnected())publish()},1000);
  app.on('activate',()=>{if(!window)createWindow()});
 });
 app.on('window-all-closed',()=>app.quit());
-app.on('before-quit',()=>{observer?.stop();hooks?.stop()});
+app.on('before-quit',()=>{observer?.stop();hooks?.stop();clearInterval(expiryTimer)});
