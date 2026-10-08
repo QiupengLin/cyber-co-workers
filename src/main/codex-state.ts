@@ -7,6 +7,12 @@ export interface ThreadMetadata {
   status?: { type?: string; activeFlags?: string[] };
 }
 
+export function sessionSource(source: unknown, originator?: string | null): WorkerSession['source'] {
+  if (/desktop|codex\.app/i.test(originator ?? '')) return 'desktop';
+  if (source === 'cli' || /^codex[-_ ](?:tui|cli)$/i.test(originator ?? '')) return 'cli';
+  return source === 'appServer' ? 'desktop' : 'unknown';
+}
+
 export function normalizeThread(thread: ThreadMetadata, previous?: WorkerSession): WorkerSession | null {
   if (!thread.id || thread.parentThreadId || (typeof thread.source === 'object' && thread.source !== null && 'subAgent' in thread.source)) return null;
   const flags = thread.status?.activeFlags ?? [];
@@ -18,7 +24,7 @@ export function normalizeThread(thread: ThreadMetadata, previous?: WorkerSession
   } else if (thread.status?.type === 'idle') {
     status = 'idle'; detail = 'Ready for another turn.';
   } else if (thread.status?.type === 'systemError') detail = 'Codex reported a session error. Open the session for details.';
-  const source = thread.source === 'cli' ? 'cli' : thread.source === 'appServer' || /desktop|codex.app/i.test(thread.originator ?? '') ? 'desktop' : 'unknown';
+  const source = sessionSource(thread.source, thread.originator);
   return {
     id: thread.id, title: (thread.name || thread.preview || 'Untitled session').replace(/\s+/g, ' ').slice(0, 90),
     project: thread.cwd || '', source, status, detail,

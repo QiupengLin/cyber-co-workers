@@ -30,7 +30,7 @@ export class HookObserver {
   private reading = false;
   private seen = new Map<string, number>();
   private active = false;
-  constructor(private onEvent: (event: HookSessionEvent) => void, private directory = process.env.CYBER_CO_WORKERS_EVENT_DIR || join(homedir(), '.local', 'share', 'cyber-co-workers', 'events')) {}
+  constructor(private onEvent: (event: HookSessionEvent) => void, private directory = process.env.CYBER_CO_WORKERS_EVENT_DIR || join(homedir(), '.local', 'share', 'cyber-co-workers', 'events'), private onRouting?: (event: HookSessionEvent) => void) {}
   start(): void {
     if (this.active) return;
     this.active = true;
@@ -54,8 +54,11 @@ export class HookObserver {
           if (this.seen.get(file) === stat.mtimeMs) continue;
           this.seen.set(file, stat.mtimeMs);
           const event = parseHookEvent(JSON.parse(await readFile(path, 'utf8')));
-          if (!event || event.updatedAt < Date.now() - 60_000 || event.updatedAt > Date.now() + 5000) continue;
-          if (this.active) this.onEvent(event);
+          if (!event || event.updatedAt > Date.now() + 5000) continue;
+          // Pane identity outlives a turn. Replaying activity does not: an old
+          // working event must never override a currently idle daemon session.
+          if (this.active) this.onRouting?.(event);
+          if (this.active && event.updatedAt >= Date.now() - 60_000) this.onEvent(event);
         } catch { /* A concurrent hook write or bad file must not stop monitoring. */ }
       }
     } catch { /* Passive observer remains retryable when storage is unavailable. */ }

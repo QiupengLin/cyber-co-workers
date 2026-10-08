@@ -137,3 +137,9 @@ Demo mode supplies explicitly simulated workers. A browser-only preview has no E
 Vite builds the renderer into `dist/renderer`. TypeScript checks all source files, and esbuild bundles the Electron main process and preload into `dist/main`. Electron Packager produces the Mac application under `release/`. The local package is unsigned.
 
 `npm test` covers status normalization, historical/subagent filtering, fresh log discovery and completion, stable desks, dismissal, URL validation, and the hook subprocess-to-file-to-observer path. These tests do not make model requests. Live integration checks are still needed when Codex or Warp changes its protocol, log format, hook behavior, or URL handling.
+
+### Routing lifetime
+
+Warp pane links are identity metadata, separate from activity freshness. Valid persisted hook links enrich sessions already observed live, regardless of hook age; they never admit historical sessions or replay old activity. Session-end events invalidate the stored route. Hook activity still expires after one minute. Both daemon and rollout observers recognize the `codex-tui` originator as CLI, even when the transport source is `vscode`.
+
+Sessions with no captured Warp link remain visible but cannot navigate precisely. Sending a new prompt in that Warp session lets the trusted hook capture its pane URL. An empty loaded CLI session may appear untitled until it has task metadata; it can be dismissed from the roster.

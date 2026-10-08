@@ -47,7 +47,7 @@ export class OfficeStore {
     const previous = this.workers.get(session.id);
     this.workers.set(session.id, {
       ...previous, ...session,
-      focusUrl: session.focusUrl ?? previous?.focusUrl,
+      focusUrl: Object.hasOwn(session, 'focusUrl') ? session.focusUrl : previous?.focusUrl,
       desk: this.desks.get(session.id)!,
     });
   }

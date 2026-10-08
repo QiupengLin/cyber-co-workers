@@ -5,6 +5,7 @@ import { HookObserver, type HookSessionEvent } from './hooks';
 import { OfficeStore } from './store';
 import { demoSessions } from './demo';
 import { sessionTarget } from './navigation';
+import { SessionRouting } from './session-routing';
 import type { OfficeSnapshot, WorkerSession } from '../shared/types';
 
 app.setName('Cyber Co-workers');
@@ -14,6 +15,7 @@ let hooks: HookObserver | undefined;
 let expiryTimer: ReturnType<typeof setInterval> | undefined;
 let demo = process.argv.includes('--demo');
 const store = new OfficeStore();
+const routing = new SessionRouting();
 const hookEvents = new Map<string, HookSessionEvent>();
 const demos = demoSessions();
 const snapshot = (): OfficeSnapshot => demo ? {sessions:demos,connected:false,message:'Demo office — simulated sessions',demo:true} : store.snapshot();
@@ -48,13 +50,13 @@ app.whenReady().then(()=>{
   if(demo) return {ok:false,message:'This is a demo character. Switch to Live to open real sessions.'};
   const session=store.get(id);
   if(!session)return {ok:false,message:'This session is no longer available.'};
-  const target=sessionTarget(session);
-  if(!target)return {ok:false,message:session.source==='cli' ? 'Warp pane link is not available. Connect the Codex hook from README-hooks.md for precise navigation.' : 'The original app could not be identified for this session.'};
+  const target=sessionTarget(routing.apply(session));
+  if(!target)return {ok:false,message:session.source==='cli' ? 'No Warp pane link has been captured yet. Send a new prompt in that Warp session so its trusted hook can capture the link.' : 'The original app could not be identified for this session.'};
   try {await shell.openExternal(target);return {ok:true}} catch {return {ok:false,message:'Could not open the original session. Check that its app is installed.'}}
  });
  createWindow();
  observer=new CodexObserver((sessions,connected,message)=>{
-  const combined=sessions.map(mergeHook);
+  const combined=sessions.map(session=>routing.apply(mergeHook(session)));
   const ids=new Set(combined.map(s=>s.id));
   for(const [id,event] of hookEvents) {
    const current=store.get(id);
@@ -69,6 +71,10 @@ app.whenReady().then(()=>{
   const previous=store.get(event.id);
   store.upsert({id:event.id,title:event.title ?? previous?.title ?? 'Codex session',project:event.project ?? previous?.project ?? '',source:event.source==='unknown' ? previous?.source ?? 'unknown' : event.source,status:event.status,detail:event.detail,updatedAt:event.updatedAt,desk:previous?.desk ?? -1,focusUrl:event.focusUrl ?? previous?.focusUrl});
   publish();
+ }, undefined, event=>{
+  routing.remember(event);
+  const current=store.get(event.id);
+  if(current){store.upsert(routing.apply(current));publish()}
  });
  hooks.start();
  expiryTimer=setInterval(()=>{if(store.expireDisconnected())publish()},1000);

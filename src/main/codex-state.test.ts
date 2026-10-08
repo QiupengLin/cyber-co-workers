@@ -44,3 +44,7 @@ test('fresh rollout discovery excludes history and subagents, retains completion
     assert.equal((await observer.poll())[0].status, 'idle');
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test('CLI originator identifies Warp sessions despite vscode transport source', () => {
+  assert.equal(normalizeThread({id:'cli',source:'vscode',originator:'codex-tui'})?.source, 'cli');
+});

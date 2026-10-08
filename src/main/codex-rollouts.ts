@@ -1,3 +1,4 @@
+import { sessionSource } from './codex-state';
 import { readdir, stat, open } from 'node:fs/promises';
 import { join, basename } from 'node:path';
 import type { WorkerSession, WorkerStatus } from '../shared/types';
@@ -47,7 +48,7 @@ export class RolloutObserver {
             if (!meta?.id || meta.parent_thread_id || typeof meta.source === 'object') {
               this.cursors.set(file, { ...cursor, offset: info.size }); continue;
             }
-            const source = /desktop/i.test(meta.originator ?? '') ? 'desktop' : meta.source === 'cli' ? 'cli' : 'unknown';
+            const source = sessionSource(meta.source, meta.originator);
             cursor.session = { id: meta.id, title: `${basename(meta.cwd || '') || 'Codex'} · ${meta.id.slice(-6)}`, project: meta.cwd || '', source, status: 'disconnected', detail: 'Waiting for a fresh Codex activity event.', desk: -1, updatedAt: Date.now(), ...(source === 'desktop' ? { focusUrl: `codex://threads/${encodeURIComponent(meta.id)}` } : {}) };
             // On first observation inspect only a bounded tail; timestamps exclude old activity.
             cursor.offset = Math.max(0, info.size - 256 * 1024);
