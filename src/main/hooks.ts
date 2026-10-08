@@ -1,0 +1,64 @@
+import { lstat, mkdir, readdir, readFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import type { WorkerSession } from '../shared/types';
+
+export interface HookSessionEvent extends Pick<WorkerSession, 'id' | 'status' | 'updatedAt' | 'source'> {
+  title?: string;
+  project?: string;
+  detail?: string;
+  focusUrl?: string;
+  ended?: boolean;
+}
+export function parseHookEvent(value: unknown): HookSessionEvent | undefined {
+  if (!value || typeof value !== 'object') return;
+  const e = value as Record<string, unknown>;
+  if (typeof e.id !== 'string' || !/^[\w-]{1,160}$/.test(e.id) || typeof e.updatedAt !== 'number' || !Number.isFinite(e.updatedAt)) return;
+  if (!['working', 'idle', 'waiting', 'disconnected'].includes(String(e.status))) return;
+  const focusUrl = typeof e.focusUrl === 'string' && /^war(?:p|ppreview):\/\/session\/[a-fA-F0-9]{32}$/.test(e.focusUrl) ? e.focusUrl : undefined;
+  return {
+    id: e.id, status: e.status as WorkerSession['status'], updatedAt: e.updatedAt,
+    source: focusUrl ? 'cli' : 'unknown',
+    ...(typeof e.project === 'string' ? { project: e.project.slice(0, 100) } : {}),
+    ...(e.status === 'waiting' ? { detail: typeof e.detail === 'string' ? e.detail.replace(/[\x00-\x1f\x7f]/g, ' ').trim().slice(0,240) || 'Waiting for permission in Codex' : 'Waiting for permission in Codex' } : {}),
+    ...(focusUrl ? { focusUrl } : {}), ...(e.ended === true ? { ended: true } : {}),
+  };
+}
+
+export class HookObserver {
+  private timer?: ReturnType<typeof setInterval>;
+  private reading = false;
+  private seen = new Map<string, number>();
+  private active = false;
+  constructor(private onEvent: (event: HookSessionEvent) => void, private directory = process.env.CYBER_CO_WORKERS_EVENT_DIR || join(homedir(), '.local', 'share', 'cyber-co-workers', 'events')) {}
+  start(): void {
+    if (this.active) return;
+    this.active = true;
+    void this.poll();
+    this.timer = setInterval(() => void this.poll(), 700);
+  }
+  stop(): void { this.active = false; clearInterval(this.timer); this.timer = undefined; }
+  private async poll(): Promise<void> {
+    if (this.reading || !this.active) return;
+    this.reading = true;
+    try {
+      await mkdir(this.directory, { recursive: true, mode: 0o700 });
+      const directoryStat = await lstat(this.directory);
+      if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink() || (process.getuid && directoryStat.uid !== process.getuid()) || (directoryStat.mode & 0o077)) return;
+      const files = (await readdir(this.directory)).filter(name => /^[a-f0-9]{64}\.json$/.test(name)).slice(0, 512);
+      for (const file of files) {
+        try {
+          const path = join(this.directory, file);
+          const stat = await lstat(path);
+          if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 4096 || (process.getuid && stat.uid !== process.getuid())) continue;
+          if (this.seen.get(file) === stat.mtimeMs) continue;
+          this.seen.set(file, stat.mtimeMs);
+          const event = parseHookEvent(JSON.parse(await readFile(path, 'utf8')));
+          if (!event || event.updatedAt < Date.now() - 60_000 || event.updatedAt > Date.now() + 5000) continue;
+          if (this.active) this.onEvent(event);
+        } catch { /* A concurrent hook write or bad file must not stop monitoring. */ }
+      }
+    } catch { /* Passive observer remains retryable when storage is unavailable. */ }
+    finally { this.reading = false; }
+  }
+}
