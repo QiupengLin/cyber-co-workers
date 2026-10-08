@@ -13,7 +13,6 @@ app.setName('Cyber Co-workers');
 let window: BrowserWindow | null = null;
 let observer: CodexObserver | undefined;
 let hooks: HookObserver | undefined;
-let expiryTimer: ReturnType<typeof setInterval> | undefined;
 let demo = process.argv.includes('--demo');
 const store = new OfficeStore();
 const routing = new SessionRouting();
@@ -74,8 +73,7 @@ app.whenReady().then(()=>{
   if(current){store.upsert(routing.apply(current));publish()}
  });
  hooks.start();
- expiryTimer=setInterval(()=>{if(store.expireDisconnected())publish()},1000);
  app.on('activate',()=>{if(!window)createWindow()});
 });
 app.on('window-all-closed',()=>app.quit());
-app.on('before-quit',()=>{observer?.stop();hooks?.stop();clearInterval(expiryTimer)});
+app.on('before-quit',()=>{observer?.stop();hooks?.stop()});

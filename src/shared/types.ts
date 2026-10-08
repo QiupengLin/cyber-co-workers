@@ -1,6 +1,7 @@
 export type WorkerStatus = 'working' | 'idle' | 'waiting' | 'disconnected';
 export interface WorkerSession {
   id: string;
+  ended?: boolean;
   harness?: 'codex' | 'claude';
   title: string;
   project: string;

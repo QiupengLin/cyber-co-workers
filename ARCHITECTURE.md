@@ -63,7 +63,7 @@ Admission requires fresh structural activity timestamped after the observer star
 
 Reading is bounded: the initial activity tail is at most 256 KiB, and subsequent reads are at most 1 MiB per file per poll. Prompts and outputs may be present in the bytes read, but their contents are not stored in the application model or sent to the renderer. Fallback labels use the project name and a short session ID.
 
-A working session with no structural signal for two minutes becomes disconnected. Silence does not imply completion. This fallback depends on internal log formats and cannot guarantee detection of every approval or input state.
+A working session with no new structural signal retains its last reported state. Silence does not imply completion. This fallback depends on internal log formats and cannot guarantee detection of every approval or input state.
 
 ### Lifecycle hooks
 
@@ -94,11 +94,11 @@ Events contain a session ID, status, timestamp, project basename, and optional v
 | `working` | An observed active state or work event | Character works at its desk |
 | `idle` | An explicit idle state or completed/interrupted turn | Character remains present and can wander |
 | `waiting` | An observed approval or user-input request | Character shows a question mark |
-| `disconnected` | Current state cannot be established | Character shows a distinct indicator, then leaves after 30 seconds |
+| `disconnected` | Current state cannot be established | Transport observation only; existing occupants retain their last reported state |
 
-Observations are deduplicated by session ID. A live daemon record takes precedence over the log fallback; a disconnected daemon record does not replace an available log record. Main-process merging preserves hook-provided Warp links and CLI identity. Recent hook state can fill a disconnected observation or keep a hook-only session present for up to one minute. Hook callbacks publish immediately; subsequent live observations may replace their activity details.
+Observations are deduplicated by session ID. A live daemon record takes precedence over the log fallback; a disconnected daemon record does not replace an available log record. Main-process merging preserves hook-provided Warp links and CLI identity. Accepted hook state can fill a disconnected observation and keeps hook-only sessions present without an inactivity timeout. Hook callbacks publish immediately; subsequent live observations may replace their activity details.
 
-`OfficeStore` assigns the first available desk and retains that assignment across polling order changes. Missing observations become disconnected. A one-second main-process timer removes characters after 30 continuous seconds of disconnection, even without new observations. Repeated disconnected polls do not restart the timer or recreate removed characters. Live observations cancel the timer or readmit automatically removed sessions; other occupants retain their desks. Explicit dismissal and hook-reported session end remove an occupant and prevent its readmission for the remainder of the app run. These assignments and dismissals are in memory, not persisted across restarts.
+`OfficeStore` assigns the first available desk and retains that assignment across polling order changes. Missing or disconnected observations preserve existing occupants and their last reported state. Only an explicit session-end event or manual dismissal removes an occupant; no expiry timer runs. Ended sessions can resume with a new hook event, while manual dismissal prevents readmission for the app run. Assignments and dismissals are in memory, not persisted across restarts.
 
 ## Desktop boundary and navigation
 
@@ -140,7 +140,7 @@ Vite builds the renderer into `dist/renderer`. TypeScript checks all source file
 
 ### Routing lifetime
 
-Warp pane links are identity metadata, separate from activity freshness. Valid persisted hook links enrich sessions already observed live, regardless of hook age; they never admit historical sessions or replay old activity. Session-end events invalidate the stored route. Hook activity still expires after one minute. Both daemon and rollout observers recognize the `codex-tui` originator as CLI, even when the transport source is `vscode`.
+Warp pane links are identity metadata, separate from activity freshness. Valid persisted hook links enrich sessions already observed live, regardless of hook age; they never admit historical sessions or replay old activity. Session-end events invalidate the stored route. The one-minute freshness check applies only when reading spool events; accepted sessions do not expire. Both daemon and rollout observers recognize the `codex-tui` originator as CLI, even when the transport source is `vscode`.
 
 Sessions with no captured Warp link remain visible but cannot navigate precisely. Sending a new prompt in that Warp session lets the trusted hook capture its pane URL. An empty loaded CLI session may appear untitled until it has task metadata; it can be dismissed from the roster.
 
@@ -148,6 +148,6 @@ Sessions with no captured Warp link remain visible but cannot navigate precisely
 
 `scripts/claude-hook.mjs` maps Claude Code hook inputs to the shared minimal event schema and reuses the bounded atomic writer in `scripts/codex-hook.mjs`. `scripts/print-hook-config.mjs claude` generates the configuration; `npm run connect:claude` merges it into Claude settings with a backup. The event carries `harness: "claude"` and a `claude:`-prefixed ID, keeping it separate from Codex IDs in the spool, routing map, store, and UI. Existing Codex events remain compatible and default to Codex when the harness field is absent.
 
-`src/main/hook-sessions.ts` merges fresh hook sessions with Codex observations. Both hook callbacks and observer polls refresh the combined snapshot, so a Claude-only office reports connected even when the Codex daemon is unavailable. Session end produces a disconnected state rather than permanent dismissal, allowing a resumed session to return. Manual dismissals still belong to the store. Claude navigation only accepts captured Warp destinations.
+`src/main/hook-sessions.ts` merges fresh hook sessions with Codex observations. Both hook callbacks and observer polls refresh the combined snapshot, so a Claude-only office reports connected even when the Codex daemon is unavailable. Session end carries an explicit ended marker and removes the occupant, allowing a resumed session to return. Manual dismissals still belong to the store. Claude navigation only accepts captured Warp destinations.
 
-Claude is a local hook-only provider: no historical scan, transcript parsing, remote cloud monitoring, or model requests. Activity expires after 60 seconds without new evidence and uses the store's 30-second departure grace period. This can disconnect quiet work or idle/waiting sessions. Subagent hook events are filtered by `agent_id`; the adapter never stores user content or emits decisions. Tests cover the adapter lifecycle, installer preservation/idempotence, actual subprocess-to-observer delivery, namespace isolation, resumption, and expiry alongside the existing Codex tests.
+Claude is a local hook-only provider: no historical scan, transcript parsing, remote cloud monitoring, or model requests. Accepted sessions persist without an inactivity timeout and retain their last reported state. If a terminal closes without emitting SessionEnd, manual dismissal is required. Subagent hook events are filtered by `agent_id`; the adapter never stores user content or emits decisions. Tests cover the adapter lifecycle, installer preservation/idempotence, actual subprocess-to-observer delivery, namespace isolation, resumption, and retention during silence alongside the existing Codex tests.

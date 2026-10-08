@@ -1,11 +1,10 @@
 import type { WorkerSession } from '../shared/types';
 import type { HookSessionEvent } from './hooks';
 
-export const HOOK_ACTIVITY_MS = 60_000;
 export function sessionFromHook(event: HookSessionEvent, previous?: WorkerSession): WorkerSession {
   const label = event.harness === 'claude' ? 'Claude Code' : 'Codex';
   return {
-    id:event.id, harness:event.harness,
+    id:event.id, harness:event.harness, ended:event.ended,
     title:previous?.title ?? `${label} · ${event.project || event.id.slice(-6)}`,
     project:event.project ?? previous?.project ?? '',
     source:event.source === 'unknown' ? previous?.source ?? 'unknown' : event.source,
@@ -16,9 +15,9 @@ export function sessionFromHook(event: HookSessionEvent, previous?: WorkerSessio
 export function mergeHookSessions(sessions: WorkerSession[], events: Iterable<HookSessionEvent>, now = Date.now()): WorkerSession[] {
   const merged = new Map(sessions.map(session => [session.id, session]));
   for (const event of events) {
-    if (event.updatedAt < now - HOOK_ACTIVITY_MS || event.updatedAt > now + 5000) continue;
+    if (event.updatedAt > now + 5000) continue;
     const previous = merged.get(event.id);
-    if (!previous || previous.status === 'disconnected' || event.updatedAt >= previous.updatedAt) merged.set(event.id, sessionFromHook(event, previous));
+    if (event.ended || !previous || previous.status === 'disconnected' || event.updatedAt >= previous.updatedAt) merged.set(event.id, sessionFromHook(event, previous));
   }
   return [...merged.values()];
 }

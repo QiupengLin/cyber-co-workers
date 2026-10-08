@@ -16,7 +16,7 @@ npm start
 
 ## Connect
 
-Codex daemon metadata is polled read-only every two seconds. Desktop sessions using a separate private app-server are detected from **fresh structural events** in local Codex session logs. Start the office, then continue a Codex turn: the worker should appear. Already-idle desktop chats do not populate the office until fresh activity. Subagents do not occupy desks. Disconnected characters leave automatically after 30 seconds; they can return when live activity reconnects. Manual dismissal still hides a session for the remainder of the app run.
+Codex daemon metadata is polled read-only every two seconds. Desktop sessions using a separate private app-server are detected from **fresh structural events** in local Codex session logs. Start the office, then continue a Codex turn: the worker should appear. Already-idle desktop chats do not populate the office until fresh activity. Subagents do not occupy desks. Once observed, characters keep their desk and last reported state until an explicit session-end event or manual dismissal. Silence and temporary monitoring failures do not remove them. Manual dismissal still hides a session for the remainder of the app run.
 
 For permission descriptions and exact Warp pane links:
 
@@ -24,7 +24,7 @@ For permission descriptions and exact Warp pane links:
 npm run connect
 ```
 
-This adds our minimal event hooks to `~/.codex/hooks.json`, preserving existing entries and backing up an existing configuration. Review and trust the added definitions with `/hooks` in Codex. It does not grant trust itself. Details: [README-hooks.md](README-hooks.md).
+This adds our minimal event hooks to `~/.codex/hooks.json`, preserving existing entries and backing up an existing configuration. Review and trust the added definitions with `/hooks` in Codex. It does not grant trust itself. Details: [Codex and Claude Code hook reference](README-hooks.md).
 
 Desktop navigation uses the documented chat deep link. Warp navigation requires a real `WARP_FOCUS_URL` captured by a hook; absence is shown explicitly. Shared-daemon environment propagation may prevent capture, so precise Warp focus is not guaranteed without testing in your terminal. Neither navigation nor monitoring sends prompts or answers approvals.
 
@@ -38,11 +38,11 @@ This merges local observation hooks into `~/.claude/settings.json` (or `$CLAUDE_
 
 Claude Code sessions appear alongside Codex sessions with separate identities and provider labels. Hooks report working, idle, permission/input waiting, and session end. Subagent events are ignored. Claude prompts, responses, tool inputs, and notification text are never retained. Exact navigation is available only when a valid `WARP_FOCUS_URL` is provided to the hook; no Claude desktop deep link is assumed.
 
-Claude monitoring is hook-only and local: it does not discover historical sessions or remote cloud sessions. After one minute without a hook event, a session becomes disconnected and leaves after the 30-second grace period. This also applies to quiet work and idle/waiting sessions; a fresh event brings the character back. An ended session can be resumed, while manual dismissal lasts until the office restarts.
+Claude monitoring is hook-only and local: it does not discover historical sessions or remote cloud sessions. Once observed during this app run, a session stays in the office without an inactivity timeout. Its last reported state is retained until new activity or an explicit session-end event. An ended session can be resumed, while manual dismissal lasts until the office restarts.
 
 ## Current limitations
 
-- Desktop fallback depends on internal log structure and recognizes explicit work/completion/input markers. It is not a complete official observation API. Quiet long-running work becomes disconnected after two minutes rather than falsely idle.
+- Desktop fallback depends on internal log structure and recognizes explicit work/completion/input markers. It is not a complete official observation API. Quiet sessions retain their last reported state; silence does not imply completion or closure.
 - Desktop fallback labels are project plus short session ID. Daemon-backed sessions use available thread names.
 - Approval descriptions come from hooks; input questions may only have a generic waiting label.
 - Character/desk assignments and dismissals persist during this app run, not across app restarts.

@@ -1,40 +1,222 @@
-# Optional Codex hook supplement
+# Cyber Co-workers hook reference
 
-The app's primary session monitor does not require hooks. This supplement can add lifecycle events and capture the originating Warp pane when Codex passes Warp's environment to its hooks. It does not run Codex, change permissions, approve requests, or read a transcript.
+Cyber Co-workers observes local Codex and Claude Code sessions through small Node.js commands invoked by each harness. Each command reads one JSON event from standard input, reduces it to session metadata, and writes a local event file. The desktop app reads that file and updates the character associated with the session.
 
-## Setup
+Codex hooks supplement the app's daemon and local-log observers. Claude Code hooks are its only observation source. Once admitted, a session retains its desk and last reported state without an inactivity timeout. An explicit session-end event or manual dismissal removes it.
 
-1. Review `scripts/codex-hook.mjs`. From this project run `node scripts/print-hook-config.mjs` to print a configuration with absolute script and Node paths.
-2. Merge the printed `hooks` entries into your existing `~/.codex/hooks.json` (or `$CODEX_HOME/hooks.json` if customized). Preserve all existing hooks. If the file does not exist, the printed object is the entire file. No installer has edited your config.
-3. In Codex CLI, use `/hooks` to review and trust the new definitions, then start or resume a session. Codex deliberately skips new or changed untrusted hooks. Do not bypass hook trust. Desktop hook support depends on the installed version and its hook configuration/trust UI; the primary observer is independent of that.
-4. In a Warp shell, `printenv WARP_FOCUS_URL` should show a `warp://session/` link. The hook preserves that exact link if it has a valid 32-digit hex session ID. It also supports Warp Preview links. It never constructs a link from a guessed terminal ID.
+This reference describes the repository implementation as of October 8, 2026. “Claude Code” is the harness name; this integration does not monitor remote cloud sessions.
 
-After setup, launching Codex normally continues to work. Existing sessions may need a resume/restart before new hook configuration is loaded. Node must remain installed at the printed absolute path.
+## Integration overview
 
-## Limits
+| Property | Codex | Claude Code |
+| --- | --- | --- |
+| Adapter | [scripts/codex-hook.mjs](scripts/codex-hook.mjs) | [scripts/claude-hook.mjs](scripts/claude-hook.mjs) |
+| Install command | `npm run connect` | `npm run connect:claude` |
+| Print configuration only | `node scripts/print-hook-config.mjs codex` | `node scripts/print-hook-config.mjs claude` |
+| Default configuration | `~/.codex/hooks.json` | `~/.claude/settings.json` |
+| Configuration directory override | `CODEX_HOME` | `CLAUDE_CONFIG_DIR` |
+| Registered event names | 8 | 14 |
+| Stored session ID | Original `session_id` | `claude:` followed by original `session_id` |
+| Stored provider field | No `harness` field; treated as Codex | `harness: "claude"` |
+| Stored source | `cli` with a valid Warp link; otherwise `unknown` | Always `cli`, even without a Warp link |
+| Other monitoring sources | Daemon metadata and fresh local structural log events | None |
 
-Codex's shared background daemon may not pass a particular terminal's Warp environment to hook subprocesses. A missing Warp link means exact-pane focus is unavailable; it must not be treated as successful navigation. Session metadata from the primary observer should remain authoritative for distinguishing desktop from CLI. The hook marks source as `cli` only when it receives a valid Warp focus link; otherwise it reports `unknown`.
+## Codex hooks
 
-`PermissionRequest` reports the optional human-readable `tool_input.description`, stripped of control characters and capped at 240 characters, or “Waiting for permission in Codex.” All other tool arguments, prompts, and transcripts are discarded. Requests for user input that are not permission requests must come from the primary live observer. Subagent start/stop events are omitted so a subagent cannot create a separate desk or mark its parent idle. Parent-scoped tool events may still reflect a subagent's activity, so live observer state takes priority.
+### Registered events and exact mappings
 
-The hook writes only session ID, state, timestamp, project basename, optional Warp focus link, and an explicit session-end marker. Files are private (directory 0700, files 0600) under `~/.local/share/cyber-co-workers/events`. One atomically replaced file per session bounds per-session growth. The app rejects malformed/oversized files and events older than one minute so stale historical conversations do not populate the room. Old files can be deleted when the app is stopped. Set `CYBER_CO_WORKERS_EVENT_DIR` consistently for hook and app only if you need a different private directory.
+The following eight events are generated by [print-hook-config.mjs](scripts/print-hook-config.mjs). Statuses describe this app's mapping, not a guarantee that the underlying process is alive.
 
-The hook has a 1.2-second internal deadline, a 1 MiB input cap, and always exits without denying a Codex action. It performs no network requests. The generated Codex timeout is two seconds.
+| Hook event | Adapter status | Additional behavior |
+| --- | --- | --- |
+| `SessionStart` | `idle` | Becomes `working` if the input's `source` is exactly `compact`. |
+| `UserPromptSubmit` | `working` | Does not retain the prompt. |
+| `PreToolUse` | `working` | No tool-name-specific status handling. |
+| `PostToolUse` | `working` | Tool completion does not mean the entire turn is finished. |
+| `PermissionRequest` | `waiting` | Stores the sanitized `tool_input.description` if present and nonempty; otherwise `Waiting for permission in Codex`. |
+| `Stop` | `idle` | Keeps the character in the office. |
+| `Interrupt` | `idle` | Keeps the character in the office. |
+| `SessionEnd` | `disconnected` | Also writes `ended: true`; the store removes the character immediately. |
 
-## Verification
+The adapter requires `session_id` to match `^[\w-]{1,160}$`: 1–160 ASCII letters, digits, underscores, or hyphens. It reads `hook_event_name`, `source`, `cwd`, and the optional permission description. `updatedAt` is generated with `Date.now()` when the adapter runs; it is not copied from a harness timestamp.
 
-Run `node --test scripts/codex-hook.test.mjs`. Real Warp pane focus still requires a live CLI session from your terminal; a synthetic test cannot verify desktop navigation.
+For permission descriptions, control characters U+0000–U+001F and U+007F become spaces, surrounding whitespace is trimmed, and the result is limited to 240 JavaScript string code units. Other tool arguments, including commands, are not written. A description is still user/tool-supplied text and may itself contain sensitive information.
 
-## Sources
+### Coverage and trust
 
-- [Official Codex hooks documentation](https://learn.chatgpt.com/docs/hooks): current input schema, events, configuration, and `/hooks` trust flow.
-- [Warp upstream focus environment implementation](https://github.com/warpdotdev/warp/pull/11130/files): `WARP_FOCUS_URL`, `WARP_TERMINAL_SESSION_UUID`, and the session URL format.
-- [Warp 2026 changelog](https://docs.warp.dev/changelog/2026/): release announcement for terminal focus URL environment variables.
+The generated configuration does not register `SubagentStart`, `SubagentStop`, compaction events, notifications, or tool-failure events for Codex. The Codex adapter does not inspect `agent_id` or parent metadata. Consequently, omitting subagent lifecycle hooks is not a blanket filter on all subagent-related tool activity. The daemon and rollout observers perform their own parent/subagent filtering.
 
-## Claude Code
+Codex hook definitions require review and trust through `/hooks`; installing this project's configuration does not grant trust. New or changed definitions may be skipped until reviewed. See the [official Codex hook documentation](https://learn.chatgpt.com/docs/hooks) for the harness's configuration and trust contract.
 
-Run `npm run connect:claude` to install the Claude adapter, or `node scripts/print-hook-config.mjs claude` to inspect its configuration first. The target is `~/.claude/settings.json`, with `CLAUDE_CONFIG_DIR` supported for a custom directory. Existing settings and hooks are preserved and backed up; repeated installs do not duplicate commands. Restart Claude Code after installation and inspect `/hooks`.
+### Interaction with the other Codex observers
 
-The adapter uses the [official Claude Code hook contract](https://code.claude.com/docs/en/hooks): lifecycle and tool events report activity; `PermissionRequest`, `AskUserQuestion`, and elicitation events report waiting. Selected notifications provide permission/input and idle fallback signals. `StopFailure` reports an idle session after a failed turn; `PostToolUseFailure` reports continued work. Subagent events carrying `agent_id` are ignored. Every hook exits without policy decisions or stdout; it cannot approve, deny, or inject context.
+[observer.ts](src/main/observer.ts) polls loaded-thread metadata every two seconds using `thread/loaded/list` and `thread/read` with `includeTurns: false`. It also polls [codex-rollouts.ts](src/main/codex-rollouts.ts) every two seconds for fresh structural events. These are independent of hook execution.
 
-Claude IDs use a `claude:` namespace in the shared private spool. The hook retains only status, time, project basename, provider, a generic waiting label, and an optional exact Warp link. It does not read transcripts or retain prompt, tool-input, response, or notification content. Hook activity expires after 60 seconds; disconnected occupants leave after 30 more seconds and return on fresh activity unless manually dismissed. Remote hooks cannot reach this local spool.
+[hook-sessions.ts](src/main/hook-sessions.ts) starts with those observations and overlays an accepted hook when any of these conditions holds:
+
+- The hook contains `ended: true`.
+- No observation with the same ID exists.
+- The observation is `disconnected`.
+- The hook's `updatedAt` is greater than or equal to the observation's `updatedAt`.
+
+Otherwise, the existing observation wins. Hook state is therefore not always authoritative, and neither is daemon state. Warp routing is applied separately after this merge. Codex input questions can be identified by the other observers; this adapter does not special-case question tools.
+
+## Claude Code hooks
+
+### Registered events and exact mappings
+
+The Claude adapter registers the following 14 events. It reuses the Codex adapter's session-ID validation, project-basename extraction, Warp-link validation, and event-file writer, but supplies its own status and identity fields.
+
+| Hook event | Adapter status | Additional behavior |
+| --- | --- | --- |
+| `SessionStart` | `idle` | Becomes `working` when `source` is exactly `compact`. |
+| `UserPromptSubmit` | `working` | Does not retain the prompt. |
+| `PreToolUse` | `working` | Exact tool name `AskUserQuestion` changes the status to `waiting`. |
+| `PostToolUse` | `working` | Reports that the session is continuing after a tool call. |
+| `PostToolUseFailure` | `working` | A failed tool does not imply the turn ended. |
+| `PermissionRequest` | `waiting` | Detail is exactly `Waiting for permission in Claude Code`. |
+| `Notification` | Conditional | See the notification table below; unrecognized notification types produce no event. |
+| `Stop` | `idle` | Turn completion keeps the character in the office. |
+| `StopFailure` | `idle` | A failed turn is represented as idle; there is no separate error status. |
+| `SessionEnd` | `disconnected` | Also writes `ended: true`; removes the character immediately. |
+| `PreCompact` | `working` | Compaction counts as ongoing work. |
+| `PostCompact` | `working` | Continues to show work after compaction. |
+| `Elicitation` | `waiting` | Detail is exactly `Waiting for your input in Claude Code`. |
+| `ElicitationResult` | `working` | Returns to work after the elicitation response. |
+
+`AskUserQuestion` is a tool name handled inside `PreToolUse`, not a separately registered hook event. Its waiting detail is `Waiting for your input in Claude Code`.
+
+| `Notification.notification_type` | Adapter status | Stored detail |
+| --- | --- | --- |
+| `permission_prompt` | `waiting` | `Waiting for permission in Claude Code` |
+| `idle_prompt` | `idle` | None |
+| `elicitation_dialog` | `waiting` | `Waiting for your input in Claude Code` |
+| `elicitation_url_dialog` | `waiting` | `Waiting for your input in Claude Code` |
+| Any other value | No event | Nothing written |
+
+The generated `Notification` hook has no matcher. All delivered notification types invoke the script; the script filters them. Notification `message` and `title` are discarded. Unlike Codex, Claude's adapter also discards `tool_input.description`; all waiting descriptions are generic.
+
+### Subagents and unsupported events
+
+Any input with a truthy `agent_id` is ignored before normalization. A root session's `agent_type` alone does not suppress it. `SubagentStart`, `SubagentStop`, and `Interrupt` are not registered for Claude, and the adapter does not map them. Other unrecognized event names produce no event.
+
+Claude documents `agent_id` as identifying a subagent hook invocation, and `AskUserQuestion`, permissions, notifications, and elicitation have distinct event paths. The adapter uses only the subset above. See the [official Claude Code hook reference](https://code.claude.com/docs/en/hooks) for the full harness contract.
+
+### Identity and scope
+
+For input `session_id: "abc-123"`, Claude writes `id: "claude:abc-123"` and `harness: "claude"`. Codex with the same input writes `id: "abc-123"`. They therefore occupy separate store entries and event files.
+
+The adapter always labels Claude as `source: "cli"`; this is an implementation convention, not proof that a terminal or Warp pane was detected. A valid `focusUrl` is required for exact Warp navigation. There is no Claude daemon connection, transcript scan, desktop deep link, or remote-event transport.
+
+## Configuration and installation
+
+Both providers use the same generated handler shape. This example illustrates one entry; print the configuration to obtain the complete event list and actual absolute paths:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/absolute/path/to/node' '/absolute/path/to/scripts/claude-hook.mjs'",
+            "timeout": 2
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+There is one group and one command handler per registered event. No matcher or `async` field is generated. Paths are shell-quoted, including embedded apostrophes. The Node executable is the `process.execPath` used to run the configuration generator. The generated timeout is two seconds; the script has its own 1.2-second deadline.
+
+[install-hooks.mjs](scripts/install-hooks.mjs) preserves unrelated settings and existing hook groups. For each event, it appends the generated group unless an existing handler has the exact same command string. This deduplication does not compare timeout, matcher, or other handler fields, and it does not update an existing matching handler. Moving the repository or changing the Node path creates a different command string and can leave an old registration alongside the new one.
+
+Before changing an existing file, the installer copies it to `<target>.cyber-backup-<timestamp>`. It writes a temporary file with mode `0600` and renames it over the target. It rejects invalid JSON, non-object configurations, unsupported non-array event entries, and nonregular or symlink configuration targets. Repeating an unchanged installation performs no write and creates no additional backup.
+
+Review the resulting definitions with the harness's `/hooks` interface. If an existing session has not loaded the change, restart or resume it. The installed Node executable and adapter paths must remain available. Rebuilding the repository alone does not update an already-running packaged desktop app; package and relaunch that app when its observer code changes.
+
+## Shared event format and local delivery
+
+A Claude permission event can look like this; IDs, project, timestamp, and Warp link are illustrative:
+
+```json
+{
+  "id": "claude:abc-123",
+  "harness": "claude",
+  "status": "waiting",
+  "updatedAt": 1791485100000,
+  "source": "cli",
+  "project": "cyber-co-workers",
+  "focusUrl": "warp://session/550e8400e29b41d4a716446655440000",
+  "detail": "Waiting for permission in Claude Code"
+}
+```
+
+| Field | Written value |
+| --- | --- |
+| `id` | Validated session ID, namespaced for Claude |
+| `harness` | `claude` for Claude; omitted for Codex |
+| `status` | `working`, `idle`, `waiting`, or `disconnected` |
+| `updatedAt` | Unix epoch milliseconds from the hook process |
+| `source` | Provider-specific value described above |
+| `project` | Optional `basename(cwd)`, limited to 100 JavaScript string code units; not the full working directory |
+| `focusUrl` | Optional validated value from `WARP_FOCUS_URL` |
+| `detail` | Permission/input detail when waiting; otherwise omitted |
+| `ended` | Present as `true` only for `SessionEnd` |
+
+Neither adapter writes a session title or the original hook event name. Hook-only display titles are constructed as `Codex · <project>` or `Claude Code · <project>`; without a project they use the final six characters of the ID. An existing observation's title is retained when a hook overlays it.
+
+The shared writer in [codex-hook.mjs](scripts/codex-hook.mjs) performs these steps:
+
+1. Read stdin up to 1 MiB and parse one JSON value.
+2. Normalize the event; stop silently if it is unsupported or invalid.
+3. Use `CYBER_CO_WORKERS_EVENT_DIR`, or default to `~/.local/share/cyber-co-workers/events`.
+4. Create the directory with requested mode `0700`. Reject it if it is a symlink, is not a directory, belongs to another UID where UID checks are available, or grants any group/other permission bits.
+5. Hash the normalized ID with SHA-256. Write `<hash>-<randomUUID>.tmp` with mode `0600` and exclusive creation, then atomically rename it to `<hash>.json`.
+
+Each session has one latest-event file, not an event history. Intermediate events can be overwritten before the app polls. Concurrent writes are not serialized by timestamp, so this is best-effort observation rather than guaranteed ordered delivery. There is no automatic cleanup of old session files, and hashing filenames does not encrypt their contents.
+
+The script performs no network calls and does not read `transcript_path`. It emits no stdout decision or context. Caught input/filesystem errors are silent, and its internal timeout exits with code 0. Failure to launch Node or parse the script itself occurs outside that error handler.
+
+## App ingestion and retention
+
+[HookObserver](src/main/hooks.ts) polls immediately on start and then every 700 milliseconds, skipping overlapping polls. It examines at most the first 512 filenames matching 64 lowercase hexadecimal characters plus `.json`; this list is not ordered by activity. Old files can therefore crowd out newer files if the directory grows beyond that limit.
+
+The observer validates directory ownership and permissions as above. Each candidate must be a regular non-symlink file, no larger than 4096 bytes, and owned by the current UID where available. The writer requests `0600`; the reader does not separately enforce file mode bits. Files with unchanged `mtimeMs` are skipped.
+
+The parser validates the ID, finite numeric timestamp, supported status, and Claude namespace/provider consistency. It reconstructs `source` from the provider and valid Warp link rather than trusting the serialized source. It truncates project and waiting detail again and discards unknown fields, including `title`.
+
+There are two distinct time rules:
+
+- **Admission from disk:** events more than five seconds in the future are rejected. Events at least as recent as `Date.now() - 60_000` reach the activity callback. Older valid events reach only the routing callback and cannot create a character.
+- **Retention after admission:** accepted in-memory hook events have no age-based expiry. Existing characters keep their last state and desk when observations disappear or become `disconnected`. There is no inactivity-removal timer.
+
+A fresh `SessionEnd` produces `ended: true`, which takes precedence in merging and removes the occupant. Its accepted end event continues to override observations until a later accepted hook replaces it. Manual dismissal removes the occupant and blocks readmission for that app run; a normal session end does not permanently block a resumed session.
+
+All occupancy, accepted-event, routing, and dismissal maps are in memory. Restarting the office loses them. An older hook-only session needs a fresh event to reappear after restart. If a process crashes, a terminal closes without emitting `SessionEnd`, or an end event is missed, the last character state remains and manual dismissal is necessary. Retained `working` or `waiting` is last-known state, not a liveness guarantee.
+
+## Warp navigation
+
+The adapters accept `WARP_FOCUS_URL` only if it matches `^war(?:p|ppreview)://session/[a-fA-F0-9]{32}$`: `warp://session/` or `warppreview://session/`, followed by exactly 32 hexadecimal characters. The hook boundary does not accept a trailing slash or arbitrary action URL. It never constructs a pane link from a PID, terminal name, or guessed UUID.
+
+[SessionRouting](src/main/session-routing.ts) keeps a known valid link when a newer event has no link. An end event clears it. Older routing events cannot override newer ones; at equal timestamps an existing end marker wins. Valid old files can restore routing for an independently observed session without replaying its activity.
+
+[navigation.ts](src/main/navigation.ts) allows an exact Warp session destination and, for Codex desktop sessions, a `codex://threads/<id>` destination. Claude has no desktop fallback. Missing Warp environment propagation therefore leaves a Claude session visible but without an exact navigation target. Clicking a character opens the destination through Electron; it does not send a prompt or answer permission requests.
+
+## Verification and troubleshooting
+
+Run these commands from the repository root:
+
+```sh
+node scripts/print-hook-config.mjs codex
+node scripts/print-hook-config.mjs claude
+npm test
+npm run build
+```
+
+The tests cover adapter mappings and privacy, real hook subprocess-to-observer delivery, configuration preservation and idempotence, namespace isolation, session-end/resume behavior, retention during inactivity, and Warp routing recovery. Synthetic tests do not prove that a particular running harness loaded its configuration or passed its Warp environment.
+
+If a session does not appear, check the provider's generated configuration, adapter and Node paths, hook review/loading state, and whether the installed app contains the corresponding observer code. Then check whether the private event directory receives a new provider-specific JSON event. Existing files over one minute old do not establish current admission. If events are fresh but missing in the app, check directory ownership/mode, file size, timestamps, the 512-file limit, manual dismissal, and whether the desktop is displaying demo mode.

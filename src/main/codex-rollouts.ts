@@ -94,9 +94,6 @@ export class RolloutObserver {
     const sessions: WorkerSession[] = [];
     for (const cursor of this.cursors.values()) {
       if (!cursor.session || !cursor.lastSignal) continue;
-      if (cursor.session.status === 'working' && Date.now() - cursor.lastSignal > 120_000) {
-        cursor.session = { ...cursor.session, status: 'disconnected', detail: 'No recent event signal; live state is unknown. Open Codex to check.' };
-      }
       sessions.push(cursor.session);
     }
     return sessions;
